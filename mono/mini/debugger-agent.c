@@ -4193,14 +4193,32 @@ thread_startup (MonoProfiler *prof, uintptr_t tid)
 	}
 
 	tls = (DebuggerTlsData *)mono_native_tls_get_value (debugger_tls_id);
-	g_assert (!tls);
-	// FIXME: Free this somewhere
-	tls = g_new0 (DebuggerTlsData, 1);
-	MONO_GC_REGISTER_ROOT_SINGLE (tls->thread, MONO_ROOT_SOURCE_DEBUGGER, NULL, "Debugger Thread Reference");
-	tls->thread = thread;
-	// Do so we have thread id even after termination
-	tls->thread_id = (intptr_t) thread->tid;
-	mono_native_tls_set_value (debugger_tls_id, tls);
+	//g_assert(!tls); // Replaced this assert with below...
+	bool had_tls = tls != NULL;
+	if (!tls) {
+		// FIXME: Free this somewhere
+		// However, it appears (see the FIXME in thread_end in this file) that some code can't handle this being freed
+		tls = g_new0(DebuggerTlsData, 1);
+	} else {
+		// This thread may have had thread_end called due to a call to mono_thread_detach?
+		// Certainly this does occur if client code calls mono_thread_attach, then mono_thread_detach, then mono_thread_attach again
+		// TODO: Setup a unit test that does that
+		// For now, just be very specific with asserts
+		g_assert(tls->thread_id == (intptr_t)thread->tid);
+		g_assert(tls->terminated);
+		g_assert(!tls->thread);
+		DEBUG_PRINTF(1, "[%p] thread_start () called multiple times for %p, re-registering.\n", GUINT_TO_POINTER(tid), GUINT_TO_POINTER(tid));
+		tls->terminated = FALSE;
+	}
+	if (!tls->thread) {
+		MONO_GC_REGISTER_ROOT_SINGLE(tls->thread, MONO_ROOT_SOURCE_DEBUGGER, NULL, "Debugger Thread Reference");
+		tls->thread = thread;
+	}
+	if (!had_tls) {
+		// Do so we have thread id even after termination
+		tls->thread_id = (intptr_t)thread->tid;
+		mono_native_tls_set_value (debugger_tls_id, tls);
+	}
 
 	DEBUG_PRINTF (1, "[%p] Thread started, obj=%p, tls=%p.\n", (gpointer)tid, thread, tls);
 
