@@ -4194,7 +4194,7 @@ thread_startup (MonoProfiler *prof, uintptr_t tid)
 
 	tls = (DebuggerTlsData *)mono_native_tls_get_value (debugger_tls_id);
 	//g_assert(!tls); // Replaced this assert with below...
-	bool had_tls = tls != NULL;
+	gboolean had_tls = tls != NULL;
 	if (!tls) {
 		// FIXME: Free this somewhere
 		// However, it appears (see the FIXME in thread_end in this file) that some code can't handle this being freed
